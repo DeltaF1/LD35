@@ -299,7 +299,7 @@ end
 
 Monster = class{__includes=Mobile}
 
-Monster.exclaimFont = love.graphics.newFont("assets/fonts/FFFFORWA.TTF")
+Monster.exclaimFont = love.graphics.newFont("assets/fonts/FFFFORWA.TTF", 20)
 
 function Monster:init(...)
 	Mobile.init(self, ...)
@@ -367,7 +367,7 @@ function Monster:draw()
 	if self.alerted then
 		love.graphics.setColor(255,0,0)
 		love.graphics.setFont(Monster.exclaimFont)
-		love.graphics.print("!",self.pos.x+(self.scale.x/2), self.pos.y-self.scale.y-10)
+		love.graphics.print("!",self.pos.x+(self.scale.x/2), self.pos.y-self.scale.y-5)
 	end
 end
 
@@ -445,6 +445,10 @@ function game:mousepressed(x,y, button)
 		if obj.active and obj ~= player then
 			
 			if obj:contains(vector(x,y)) then
+				for j = 1,#self.objects.items do
+					self.objects.items[j].alertAmount = 0
+					self.objects.items[j].alerted = nil
+				end
 				self.timer.tween(0.5, player.pos, {x=obj.pos.x, y=obj.pos.y}, "linear", function()
 					obj.active = false
 					player:init(obj.pos, obj.scale, obj.stats)
