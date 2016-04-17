@@ -253,6 +253,8 @@ function Mobile:update(dt)
 	end
 	
 	self.xOffset, self.yOffset = 0,0
+	
+	self.center = self.pos + (self.scale/2)
 end
 
 function Mobile:jump()
@@ -315,21 +317,21 @@ function Monster:update(dt)
 	
 	
 	
-	self.ray = player.pos - self.pos
+	self.ray = player.center - self.center
 	
 	if not self.alerted then
 		if math.random() > 0.99 then
 			self.vel.x = -self.vel.x
 			if self.vel.x == 0 then self.vel.x = self.speed end
 		end
-		if self.alertAmount >= 5 then
+		if self.alertAmount >= 1 then
 			self.alerted = true
 		end
 		 
 		if self.ray:len() <= 800 and -- Don't do the rest if we're not close enough to see
 		  sign(self.facing.x) == sign(self.ray.x) and -- Check to make sure we're facing the player
 		  self.facing:angleTo(self.ray) < (math.pi-1) and -- Check to see if we're in FOV
-		  not mapcast(self.pos, player.pos) then -- Check to see if there are obstructions
+		  not mapcast(self.center, player.center) then -- Check to see if there are obstructions
 			--self.colour = {255,0,0,255}
 			-- be alerted
 			self.alertAmount = self.alertAmount + dt * 3
@@ -346,9 +348,10 @@ function Monster:update(dt)
 		
 		if self:standing() then
 			game.timer.after(0.1, function()
-				local nextFloor = tiles[mapAt(self.pos + (vector(tileWidth * dir, 1)))]
+				local nextFloor = tiles[mapAt(self.center + (vector(tileWidth * dir, self.scale.y+5)))]
+				local inFront = tiles[mapAt(self.center + (vector(tileWidth*dir, 0)))]
 				
-				if not nextFloor.collides then
+				if not nextFloor.collides or inFront.collides then
 					self:jump()
 				end
 			end)
@@ -359,7 +362,7 @@ end
 
 function Monster:draw()
 	Mobile.draw(self)
-	--love.graphics.line(self.pos.x, self.pos.y, self.pos.x+self.ray.x, self.pos.y+self.ray.y)
+	love.graphics.line(self.center.x, self.center.y, self.center.x+self.ray.x, self.center.y+self.ray.y)
 	--love.graphics.setColor(0,0,255)
 	--love.graphics.line(self.pos.x, self.pos.y, self.pos.x+self.facing.x, self.pos.y+self.facing.y)
 	--love.graphics.print(tostring(self.alertAmount), self.pos.x, self.pos.y)
