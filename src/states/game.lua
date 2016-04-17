@@ -205,7 +205,7 @@ Monsters = {
 		scale = vector(30,60),
 		colour = {10,230,0,255},
 		speed = 50,
-		jump = 150,
+		jumpHeight = 150,
 	}
 }
 
@@ -255,12 +255,18 @@ function Mobile:update(dt)
 	self.xOffset, self.yOffset = 0,0
 end
 
+function Mobile:jump()
+	if self:standing() then
+		self.vel.y = -self.jumpHeight
+	end
+end
+
 function Mobile:draw()
 	love.graphics.setColor(self.colour)
 	love.graphics.rectangle("fill", self.pos.x, self.pos.y, self.scale.x, self.scale.y)
 end
 
-function Mobile:standing()
+function Mobile:colliding()
 	for i,v in ipairs(corners(self)) do
 		local tile = mapAt(v)
 		if tile then
@@ -271,6 +277,10 @@ function Mobile:standing()
 	end
 end
 
+function Mobile:standing()
+	return not self:check(vector(0,1))
+end
+
 function Mobile:check(delta)
 	local oldpos = self.pos
 	local newpos = oldpos + delta
@@ -278,7 +288,7 @@ function Mobile:check(delta)
 	
 	-- if there are no collisions
 	-- return newpos
-	local standing = self:standing()
+	local standing = self:colliding()
 	
 	self.pos = oldpos
 	
@@ -288,6 +298,8 @@ function Mobile:check(delta)
 end
 
 Monster = class{__includes=Mobile}
+
+Monster.exclaimFont = love.graphics.newFont("assets/fonts/FFFFORWA.TTF")
 
 function Monster:init(...)
 	Mobile.init(self, ...)
@@ -301,22 +313,24 @@ end
 function Monster:update(dt)
 	Mobile.update(self, dt)
 	
-	if math.random() > 0.99 then
-		self.vel.x = -self.vel.x
-	end
+	
 	
 	self.ray = player.pos - self.pos
 	
 	if not self.alerted then
+		if math.random() > 0.99 then
+			self.vel.x = -self.vel.x
+			if self.vel.x == 0 then self.vel.x = self.speed end
+		end
 		if self.alertAmount >= 5 then
 			self.alerted = true
 		end
 		 
 		if self.ray:len() <= 800 and -- Don't do the rest if we're not close enough to see
 		  sign(self.facing.x) == sign(self.ray.x) and -- Check to make sure we're facing the player
-		  self.facing:angleTo(self.ray) < math.pi and -- Check to see if we're in FOV
+		  self.facing:angleTo(self.ray) < (math.pi-1) and -- Check to see if we're in FOV
 		  not mapcast(self.pos, player.pos) then -- Check to see if there are obstructions
-			self.colour = {255,0,0,255}
+			--self.colour = {255,0,0,255}
 			-- be alerted
 			self.alertAmount = self.alertAmount + dt * 3
 		else
@@ -326,6 +340,19 @@ function Monster:update(dt)
 		
 	else
 		-- A* D:
+		local dir = sign(self.ray.x)
+		
+		self.vel.x = self.speed * dir
+		
+		if self:standing() then
+			game.timer.after(0.1, function()
+				local nextFloor = tiles[mapAt(self.pos + (vector(tileWidth * dir, 1)))]
+				
+				if not nextFloor.collides then
+					self:jump()
+				end
+			end)
+		end
 	end
 end
 
@@ -336,6 +363,12 @@ function Monster:draw()
 	--love.graphics.setColor(0,0,255)
 	--love.graphics.line(self.pos.x, self.pos.y, self.pos.x+self.facing.x, self.pos.y+self.facing.y)
 	--love.graphics.print(tostring(self.alertAmount), self.pos.x, self.pos.y)
+	
+	if self.alerted then
+		love.graphics.setColor(255,0,0)
+		love.graphics.setFont(Monster.exclaimFont)
+		love.graphics.print("!",self.pos.x+(self.scale.x/2), self.pos.y-self.scale.y-10)
+	end
 end
 
 
@@ -345,7 +378,7 @@ player = Mobile(
 	{
 		colour = {220,0,0,255},
 		speed = 200,
-		jump = 320
+		jumpHeight = 320
 	}
 )
 
@@ -362,9 +395,11 @@ function player:update(dt)
 	Mobile.update(self,dt)
 end
 
+
+
 function player:keypressed(key)
-	if key == "space" and not self:check(vector(0,1)) then
-		self.vel.y = -self.jump
+	if key == "space" then
+		self:jump()
 	end
 end
 
@@ -383,8 +418,13 @@ function game:init()
 	--local troll = Mobile(vector(250, 100), nil, Monsters.Troll)
 	--self.objects:add(troll)
 	
-	for i = 1,10 do
-		self.objects:add(Monster(vector(i*5*tileWidth, 150), vector(love.math.random(20,60), love.math.random(20,60)), {speed=love.math.random(100,150),jump=love.math.random(300, 500),colour={love.math.random(255),love.math.random(255),love.math.random(255),255}}))
+	for i = 1,20 do
+		local mob = Monster(vector(i*5*tileWidth, 150), vector(love.math.random(20,60), love.math.random(20,60)), {speed=love.math.random(100,150),jumpHeight=love.math.random(300, 500),colour={love.math.random(255),love.math.random(255),love.math.random(255),255}})
+		if not mob:colliding() then
+			self.objects:add(mob)
+		else
+			i = i + 1
+		end
 	end
 	
 	self.timer = require "hump.timer"
@@ -404,7 +444,6 @@ function game:mousepressed(x,y, button)
 		
 		if obj.active and obj ~= player then
 			
-			
 			if obj:contains(vector(x,y)) then
 				self.timer.tween(0.5, player.pos, {x=obj.pos.x, y=obj.pos.y}, "linear", function()
 					obj.active = false
@@ -412,7 +451,9 @@ function game:mousepressed(x,y, button)
 					self.objects:remove(obj)
 				end)
 				self.timer.tween(0.5, player.colour, {[4]=0})
+				break
 			end
+			
 		end
 	end
 end
