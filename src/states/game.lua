@@ -6,12 +6,12 @@ tileWidth = 34
 
 tileSet = {
 	[0] = {0,20,20},
-	[1] = {10,200,10}
+	[1] = {10,200,10},
 }
 
 tiles = {
 	[0] = {collides = false},
-	[1] = {collides = true}
+	[1] = {collides = true},
 }
 
 map = {
@@ -52,7 +52,7 @@ function genRandMap(w,h)
 			end
 			
 			local tile = 0
-			if y == 1 or y ==h then
+			if y == 1 or y ==h or x ==1 or x == w then
 				tile = 1
 			end
 			if platform then tile = 1 end
@@ -84,16 +84,81 @@ function corners(o)
 end
 
 function mapcast(start, finish)
+	local x0, y0 = (start/tileWidth):floor():unpack()
+	local x1, y1 = (finish/tileWidth):floor():unpack()
+	
+	local dx = math.abs(x1 - x0)
+	local dy = math.abs(y1 - y0)
+	
+	local x,y = x0,y0
+	
+	local sx = x0 > x1 and -1 or 1
+	local sy = y0 > y1 and -1 or 1
+	
 	local tilesToCheck = {}
 	
-	localdx = finish.x - start.x
+	if dx > dy then
+		err = dx / 2
+		while x ~= x1 do
+			table.insert(tilesToCheck, {x,y})
+			err = err - dy
+			if err < 0 then
+				y = y + sy
+				err = err + dx
+			end
+			x = x + sx
+		end
+	else
+		err = dy / 2
+		while y ~= y1 do
+			table.insert(tilesToCheck, {x,y})
+			err = err - dx
+			if err < 0 then
+				x = x + sx
+				err = err + dy
+			end
+			y = y + sy
+		end
+	end
+	table.insert(tilesToCheck, {x,y})
+	
+	for i = 1,#tilesToCheck do
+		local coords = tilesToCheck[i]
+		local x,y = coords[1], coords[2]
+		
+		if map[y] then
+			local tile = map[y][x]
+			if tile then
+				if tiles[tile].collides then
+					return coords
+				end
+			end
+		end
+	end
+end
+
+--[[
+function mapcast(start, finish)
+	local tilesToCheck = {}
+	
+	local dx = finish.x - start.x
 	local dy = finish.y - start.y
 	
 	local D = dy - dx
 	
 	local y = start.y
+	
+	for x = start.x, (finish.x - 1) do
+		table.insert(tilesToCheck, {x,y})
+		
+		if D >= 0 then
+			y = y + tileWidth
+			D = D - dx
+		end
+		D = D + dy
+	end
 end
-
+--]]
 List = {}
 
 setmetatable(List, {__call = function(...) return List:new(...) end})
@@ -167,6 +232,29 @@ function Mobile:contains(point)
 	end
 end
 
+function Mobile:update(dt)
+	self.vel = self.vel + (gravity * dt)
+	
+	self.facing = vector(self.vel.x, 0)
+	
+	self.yOffset = self.yOffset + (self.vel.y * dt)
+	self.xOffset = self.xOffset + (self.vel.x * dt)
+	
+	if self:check(vector(self.xOffset, 0)) then
+		self.pos.x = self.pos.x+self.xOffset
+	else
+		self.vel.x = 0
+	end
+	
+	if self:check(vector(0, self.yOffset)) then
+		self.pos.y = self.pos.y + self.yOffset
+	else
+		self.vel.y = 0
+	end
+	
+	self.xOffset, self.yOffset = 0,0
+end
+
 function Mobile:draw()
 	love.graphics.setColor(self.colour)
 	love.graphics.rectangle("fill", self.pos.x, self.pos.y, self.scale.x, self.scale.y)
@@ -175,11 +263,8 @@ end
 function Mobile:standing()
 	for i,v in ipairs(corners(self)) do
 		local tile = mapAt(v)
-		print(tile)
 		if tile then
 			if tiles[tile].collides then
-				print("Colliding!")
-				
 				return true
 			end
 		end
@@ -202,11 +287,57 @@ function Mobile:check(delta)
 	end
 end
 
-Monster = class(Mobile)
+Monster = class{__includes=Mobile}
+
+function Monster:init(...)
+	Mobile.init(self, ...)
+	dir = love.math.random() > 0.5 and 1 or -1
+	self.vel = vector(self.speed * dir, 0)
+	
+	self.alertAmount = 0
+end
+
 
 function Monster:update(dt)
-	self.facing = self.vel:normalized()
+	Mobile.update(self, dt)
+	
+	if math.random() > 0.99 then
+		self.vel.x = -self.vel.x
+	end
+	
+	self.ray = player.pos - self.pos
+	
+	if not self.alerted then
+		if self.alertAmount >= 5 then
+			self.alerted = true
+		end
+		 
+		if self.ray:len() <= 800 and -- Don't do the rest if we're not close enough to see
+		  sign(self.facing.x) == sign(self.ray.x) and -- Check to make sure we're facing the player
+		  self.facing:angleTo(self.ray) < math.pi and -- Check to see if we're in FOV
+		  not mapcast(self.pos, player.pos) then -- Check to see if there are obstructions
+			self.colour = {255,0,0,255}
+			-- be alerted
+			self.alertAmount = self.alertAmount + dt * 3
+		else
+			self.colour = self.stats.colour
+			if self.alertAmount > 0 then self.alertAmount = math.max(0, self.alertAmount - dt) end
+		end
+		
+	else
+		-- A* D:
+	end
 end
+
+
+function Monster:draw()
+	Mobile.draw(self)
+	--love.graphics.line(self.pos.x, self.pos.y, self.pos.x+self.ray.x, self.pos.y+self.ray.y)
+	--love.graphics.setColor(0,0,255)
+	--love.graphics.line(self.pos.x, self.pos.y, self.pos.x+self.facing.x, self.pos.y+self.facing.y)
+	--love.graphics.print(tostring(self.alertAmount), self.pos.x, self.pos.y)
+end
+
 
 player = Mobile(
 	vector(100,170),
@@ -231,27 +362,6 @@ function player:update(dt)
 	Mobile.update(self,dt)
 end
 
-function Mobile:update(dt)
-	self.vel = self.vel + (gravity * dt)
-	
-	self.yOffset = self.yOffset + (self.vel.y * dt)
-	self.xOffset = self.xOffset + (self.vel.x * dt)
-	
-	if self:check(vector(self.xOffset, 0)) then
-		self.pos.x = self.pos.x+self.xOffset
-	else
-		self.vel.x = 0
-	end
-	
-	if self:check(vector(0, self.yOffset)) then
-		self.pos.y = self.pos.y + self.yOffset
-	else
-		self.vel.y = 0
-	end
-	
-	self.xOffset, self.yOffset = 0,0
-end
-
 function player:keypressed(key)
 	if key == "space" and not self:check(vector(0,1)) then
 		self.vel.y = -self.jump
@@ -270,11 +380,11 @@ function game:init()
 	
 	
 	self.objects:add(player)
-	local troll = Mobile(vector(250, 100), nil, Monsters.Troll)
-	self.objects:add(troll)
+	--local troll = Mobile(vector(250, 100), nil, Monsters.Troll)
+	--self.objects:add(troll)
 	
-	for i = 1,20 do
-		self.objects:add(Mobile(vector(i*5*tileWidth, 150), vector(love.math.random(20,60), love.math.random(20,60)), {speed=love.math.random(100,150),jump=love.math.random(300, 500),colour={love.math.random(255),love.math.random(255),love.math.random(255),255}}))
+	for i = 1,10 do
+		self.objects:add(Monster(vector(i*5*tileWidth, 150), vector(love.math.random(20,60), love.math.random(20,60)), {speed=love.math.random(100,150),jump=love.math.random(300, 500),colour={love.math.random(255),love.math.random(255),love.math.random(255),255}}))
 	end
 	
 	self.timer = require "hump.timer"
