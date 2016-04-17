@@ -1,6 +1,9 @@
 GameState = require "hump.gamestate"
 Timer = require "hump.timer"
 vector = require "hump.vector"
+class = require "hump.class"
+
+require "misc"
 
 local _setColor = love.graphics.setColor
 function love.graphics.setColor(r,g,b,a)
