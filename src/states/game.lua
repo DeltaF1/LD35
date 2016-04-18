@@ -386,6 +386,7 @@ function Monster:init(...)
 	self.fov = math.pi/2
 	self.sightDistance = tileWidth * 7
 	self.alertAmount = 0
+	self.alertTimer = 0
 end
 
 function Monster:inSight(obj)
@@ -401,21 +402,17 @@ end
 function Monster:update(dt)
 	Mobile.update(self, dt)
 	
-	
-	
 	self.ray = player.center - self.center
 	
 	if not self.alerted then
 		if self.vel.x == 0 then self.vel.x = self.speed end
 		if math.random() > 0.99 then
-			self.vel.x = -self.vel.x
-			
+			self.vel.x = -self.vel.x	
 		end
 		if self.alertAmount >= player.alertMax then
 			self.alerted = true
 		end
-		
-		
+			
 		if self:inSight(player) then -- Check to see if there are obstructions
 			--self.colour = {255,0,0,255}
 			-- be alerted
@@ -605,6 +602,8 @@ end
 
 function game:keypressed(key)
 	self.objects:keypressed(key)
+	
+	if key == "r" then genRandMap() end
 end
 
 function game:draw()
@@ -618,14 +617,14 @@ function game:draw()
 	end
 	
 	self.objects:draw()
-	
+	--[[
 	love.graphics.setColor(200,10,10)
 	for i = 1,#mapcast_debug_tiles do
 		local coords = mapcast_debug_tiles[i]
 		
 		love.graphics.rectangle("line", coords[1], coords[2], tileWidth, tileWidth)
 	end
-	
+	--]]
 	self.camera:detach()
 end
 
