@@ -185,6 +185,14 @@ function vector:angleTo(other)
 	return atan2(self.y, self.x)
 end
 
+function vector:dot(other)
+	return (self.x*other.x) + (self.y*other.y)
+end
+
+function vector:angleTo2(other)
+	return math.acos(self:dot(other)/(self:len()*other:len()))
+end
+
 function vector:trimmed(maxLen)
 	return self:clone():trimInplace(maxLen)
 end

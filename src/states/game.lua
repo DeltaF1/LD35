@@ -39,7 +39,7 @@ function genRandMap(w,h)
 		map[y] = {}
 		local platform = false
 		for x = 1,w do
-			if y % 2 == 0 then
+			if (y + 1) % 2 == 0 then
 				if not platform then
 					if love.math.random() > 0.9 then
 						platform = not platform
@@ -83,6 +83,8 @@ function corners(o)
 	return t
 end
 
+mapcast_debug_tiles = {}
+
 function mapcast(start, finish)
 	local x0, y0 = (start/tileWidth):floor():unpack()
 	local x1, y1 = (finish/tileWidth):floor():unpack()
@@ -123,6 +125,12 @@ function mapcast(start, finish)
 	table.insert(tilesToCheck, {x,y})
 	
 	for i = 1,#tilesToCheck do
+		local x,y = tilesToCheck[i][1], tilesToCheck[i][2]
+		table.insert(mapcast_debug_tiles, {x*tileWidth, y*tileWidth})
+	end
+	
+	for i = 1,#tilesToCheck do
+		
 		local coords = tilesToCheck[i]
 		local x,y = coords[1], coords[2]
 		
@@ -137,6 +145,30 @@ function mapcast(start, finish)
 	end
 end
 
+
+--[[
+function mapcast(start, finish)
+	local x0, y0 = start:floor():unpack()
+	local x1, y1 = finish:floor():unpack()
+	
+	local dx = x1 -x0
+	local dy = y1 - y0
+	
+	local m = dy / dx
+	
+	for x = x0, x1, tileWidth*sign(dx) do
+		local y = (m*x) + y0			
+		
+		table.insert(mapcast_debug_tiles, {x,y})
+		
+		local tile = mapAt(vector(x, y))
+		
+		if tiles[tile] and tiles[tile].collides then
+			return {x,y}
+		end
+	end
+end
+--]]
 --[[
 function mapcast(start, finish)
 	local tilesToCheck = {}
@@ -307,10 +339,20 @@ function Monster:init(...)
 	Mobile.init(self, ...)
 	dir = love.math.random() > 0.5 and 1 or -1
 	self.vel = vector(self.speed * dir, 0)
-	
+	self.fov = math.pi/2
+	self.sightDistance = tileWidth * 7
 	self.alertAmount = 0
 end
 
+function Monster:inSight(obj)
+	local ray = obj.pos - self.pos
+	
+	return ray:len() <= self.sightDistance and
+		sign(self.facing.x) == sign(ray.x) and
+		self.facing:angleTo2(ray) < (self.fov/2) and
+		not mapcast(self.center, obj.center)
+		
+end
 
 function Monster:update(dt)
 	Mobile.update(self, dt)
@@ -320,18 +362,17 @@ function Monster:update(dt)
 	self.ray = player.center - self.center
 	
 	if not self.alerted then
+		if self.vel.x == 0 then self.vel.x = self.speed end
 		if math.random() > 0.99 then
 			self.vel.x = -self.vel.x
-			if self.vel.x == 0 then self.vel.x = self.speed end
+			
 		end
-		if self.alertAmount >= 1 then
+		if self.alertAmount >= player.alertMax then
 			self.alerted = true
 		end
-		 
-		if self.ray:len() <= 800 and -- Don't do the rest if we're not close enough to see
-		  sign(self.facing.x) == sign(self.ray.x) and -- Check to make sure we're facing the player
-		  self.facing:angleTo(self.ray) < (math.pi-1) and -- Check to see if we're in FOV
-		  not mapcast(self.center, player.center) then -- Check to see if there are obstructions
+		
+		
+		if self:inSight(player) then -- Check to see if there are obstructions
 			--self.colour = {255,0,0,255}
 			-- be alerted
 			self.alertAmount = self.alertAmount + dt * 3
@@ -342,13 +383,24 @@ function Monster:update(dt)
 		
 	else
 		-- A* D:
+		
+		if self:inSight(player) then
+			self.alertTimer = 10
+		else
+			self.alertTimer = self.alertTimer - dt
+		end
+		
+		if self.alertTimer <= 0 then
+			self.alerted = false
+		end
+		
 		local dir = sign(self.ray.x)
 		
 		self.vel.x = self.speed * dir
 		
 		if self:standing() then
 			game.timer.after(0.1, function()
-				local nextFloor = tiles[mapAt(self.center + (vector(tileWidth * dir, self.scale.y+5)))]
+				local nextFloor = tiles[mapAt(self.center + (vector(tileWidth * dir, (self.scale.y/2)+5)))]
 				local inFront = tiles[mapAt(self.center + (vector(tileWidth*dir, 0)))]
 				
 				if not nextFloor.collides or inFront.collides then
@@ -362,15 +414,34 @@ end
 
 function Monster:draw()
 	Mobile.draw(self)
-	love.graphics.line(self.center.x, self.center.y, self.center.x+self.ray.x, self.center.y+self.ray.y)
+	--love.graphics.line(self.center.x, self.center.y, self.center.x+self.ray.x, self.center.y+self.ray.y)
 	--love.graphics.setColor(0,0,255)
 	--love.graphics.line(self.pos.x, self.pos.y, self.pos.x+self.facing.x, self.pos.y+self.facing.y)
 	--love.graphics.print(tostring(self.alertAmount), self.pos.x, self.pos.y)
 	
-	if self.alerted then
-		love.graphics.setColor(255,0,0)
+	love.graphics.setColor(255,255,255)
+	
+	if self.alertAmount > 0 then
+		local ratio = (self.alertAmount/player.alertMax)
+		local r = 255*ratio
+		if ratio <= 0.9 then g = 255*ratio
+		else g = 0 end
+		love.graphics.setColor(r,g or 0,0)
 		love.graphics.setFont(Monster.exclaimFont)
-		love.graphics.print("!",self.pos.x+(self.scale.x/2), self.pos.y-self.scale.y-5)
+		love.graphics.print(ratio > 0.9 and "!" or "?",self.pos.x+(self.scale.x/2), self.pos.y-self.scale.y-5)
+	end
+	
+	if not self.alerted then
+		love.graphics.setColor(0,0,255)
+		local theta = self.fov/2
+		
+		love.graphics.push()
+		love.graphics.scale(sign(self.facing.x), 1)
+		--love.graphics.translate(-self.center.x, -self.center.y)
+		
+		love.graphics.translate(sign(self.facing.x)*self.center.x, self.center.y)
+		love.graphics.arc("line",0,0, self.sightDistance, theta, -theta)
+		love.graphics.pop()
 	end
 end
 
@@ -381,11 +452,10 @@ player = Mobile(
 	{
 		colour = {220,0,0,255},
 		speed = 200,
-		jumpHeight = 320
+		jumpHeight = 320,
+		alertMax = 1
 	}
 )
-
-setmetatable(player, Mobile)
 
 function player:update(dt)	
 	if love.keyboard.isDown("right") then
@@ -395,14 +465,32 @@ function player:update(dt)
 		self.xOffset = self.xOffset + (-self.speed * dt)
 	end
 	
+	if self.alertMax > 1 then
+		self.alertMax = math.max(self.alertMax - (dt/5), 1)
+	end
+	
 	Mobile.update(self,dt)
 end
 
-
+function player:attack()
+	-- make laser pew pew
+	
+	for i = 1,#game.objects.items do
+		local obj = game.objects.items[i]
+		if obj ~= self then
+			if obj:inSight(self) then
+				obj.alerted = true
+				obj.alertAmount = self.alertMax
+			end
+		end
+	end
+end
 
 function player:keypressed(key)
 	if key == "space" then
 		self:jump()
+	elseif key == "lctrl" then
+		self:attack()
 	end
 end
 
@@ -435,6 +523,7 @@ function game:init()
 end
 
 function game:update(dt)
+	mapcast_debug_tiles = {}
 	self.timer(dt)
 	self.objects:update(dt)
 	self.camera:lookAt(player.pos.x, player.pos.y)
@@ -449,9 +538,14 @@ function game:mousepressed(x,y, button)
 			
 			if obj:contains(vector(x,y)) then
 				for j = 1,#self.objects.items do
-					self.objects.items[j].alertAmount = 0
-					self.objects.items[j].alerted = nil
+					local obj = self.objects.items[j]
+					if obj.alertAmount then
+						obj.alertAmount = obj.alertAmount*0.25
+						obj.alerted = nil
+					end
 				end
+				player.alertMax = 10
+				
 				self.timer.tween(0.5, player.pos, {x=obj.pos.x, y=obj.pos.y}, "linear", function()
 					obj.active = false
 					player:init(obj.pos, obj.scale, obj.stats)
@@ -480,6 +574,14 @@ function game:draw()
 	end
 	
 	self.objects:draw()
+	
+	love.graphics.setColor(200,10,10)
+	for i = 1,#mapcast_debug_tiles do
+		local coords = mapcast_debug_tiles[i]
+		
+		love.graphics.rectangle("line", coords[1], coords[2], tileWidth, tileWidth)
+	end
+	
 	self.camera:detach()
 end
 
