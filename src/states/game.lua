@@ -165,6 +165,21 @@ function neighbours(tile)
 	return t
 end
 
+Node = class{}
+
+function Node:init(pos)
+	self.pos = pos
+end
+
+function buildNodes()
+	nodes = {}
+	for y = 1,#map do
+		for x = 1,#map[1] do
+			
+		end
+	end
+end
+
 function path(start, finish)
 	local start, finish = posToMapPos(start), posToMapPos(finish)
 	
@@ -172,10 +187,7 @@ function path(start, finish)
 	local open = {start}
 	local cameFrom = {}
 	local gScore = {}
-	for y = 1,#map do
-		for x = 1,#map[1] do
-		end
-	end
+	
 end
 
 --[[
