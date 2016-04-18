@@ -29,3 +29,10 @@ end
 function sign(x)
 	return x < 0 and -1 or 1
 end
+
+function TableConcat(t1,t2)
+    for i=1,#t2 do
+        t1[#t1+1] = t2[i]
+    end
+    return t1
+end

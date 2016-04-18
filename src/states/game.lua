@@ -145,6 +145,38 @@ function mapcast(start, finish)
 	end
 end
 
+function posToMapPos(vec)
+	return (vec/tileWidth):floor()
+end
+
+function mapPosToPos(vec)
+	return vec*tileWidth
+end
+
+function neighbours(tile)
+	local t = {}
+	for _, off in {vector.left, vetor.right, vector.up, vector.down} do
+		local x,y = tile.x + off.x, tile.y+off.y
+		
+		if map[y] and map[y][x] then
+			table.insert(t, vector(x,y))
+		end
+	end
+	return t
+end
+
+function path(start, finish)
+	local start, finish = posToMapPos(start), posToMapPos(finish)
+	
+	local closed = {}
+	local open = {start}
+	local cameFrom = {}
+	local gScore = {}
+	for y = 1,#map do
+		for x = 1,#map[1] do
+		end
+	end
+end
 
 --[[
 function mapcast(start, finish)
